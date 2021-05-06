@@ -14,3 +14,18 @@ docker run \
 --restart unless-stopped \
 dtushar/genpull:latest
 ```
+
+docker run \
+--name=genpull \
+--network=host -d \
+-v ./config.json:/opt/genpull/config.json \
+--restart unless-stopped \
+dtushar/genpull:latest
+
+
+docker run \
+--name=genpull \
+--network=host -d \
+-v ./config.json:/opt/genpull/config.json \
+--restart unless-stopped \
+gentest:latest

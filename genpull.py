@@ -12,33 +12,12 @@ from influxdb import InfluxDBClient
 from datetime import datetime
 from utils.flattener import flattening
 
-API_URL = os.getenv("API_URL", "http://localhost:80/api/").split(
-    ","
-)  # Comma separated list of nifi cluster api urls in case of multiple clusters.
-ENDPOINT_LIST = os.getenv(
-    "ENDPOINT_LIST",
-    "",
-).split(",")
-MODE = os.getenv(
-    "MODE", "unlimited"
-)  # In limited mode, only NUMBEROFITERATIONS API calls are made before exiting.
-NUMBER_OF_ITERATIONS = int(os.getenv("NUMBER_OF_ITERATIONS", 2))
-SLEEP_INTERVAL = int(os.getenv("SLEEP_INTERVAL", 300))
-
-INFLUXDB_SERVER = os.getenv(
-    "INFLUXDB_SERVER", "127.0.0.1"
-)  # IP or hostname to InfluxDB server
-INFLUXDB_PORT = int(os.getenv("INFLUXDB_PORT", 8086))  # Port on InfluxDB server
-INFLUXDB_USERNAME = os.getenv("INFLUXDB_USERNAME", "root")
-INFLUXDB_PASSWORD = os.getenv("INFLUXDB_PASSWORD", "root")
-INFLUXDB_DATABASE = os.getenv("INFLUXDB_DATABASE", "mydb")
-
-count = 0
+# count = 0
 urllib3.disable_warnings()
-conditions = {
-    "limited": lambda: count < NUMBER_OF_ITERATIONS,
-    "unlimited": lambda: True,
-}
+# conditions = {
+#     "limited": lambda: count < NUMBER_OF_ITERATIONS,
+#     "unlimited": lambda: True,
+# }
 
 # Sysout Logging Setup
 logger = logging.getLogger("genpull")
@@ -50,23 +29,49 @@ syshandler.setFormatter(formatter)
 logger.addHandler(syshandler)
 
 
-iclient = InfluxDBClient(
-    INFLUXDB_SERVER,
-    INFLUXDB_PORT,
-    INFLUXDB_USERNAME,
-    INFLUXDB_PASSWORD,
-    INFLUXDB_DATABASE,
-)
-iclient.create_database(INFLUXDB_DATABASE)
+# iclient = InfluxDBClient(
+#     INFLUXDB_SERVER,
+#     INFLUXDB_PORT,
+#     INFLUXDB_USERNAME,
+#     INFLUXDB_PASSWORD,
+#     INFLUXDB_DATABASE,
+# )
+# iclient.create_database(INFLUXDB_DATABASE)
+config ={}
 
+while True:
+    with open("config.json", "r") as f:
+        latest_config = json.load(f)
+    
+    if latest_config != config:
+        config=latest_config
+        API_URL = config["API_URL"].split(",")  # Comma separated list of api urls in case of multiple apis.
+        ENDPOINT_LIST = config["ENDPOINT_LIST"].split(",")
+        # MODE = config["MODE"]  # In limited mode, only NUMBEROFITERATIONS API calls are made before exiting.
+        # NUMBER_OF_ITERATIONS = int(config["NUMBER_OF_ITERATIONS"])
+        SLEEP_INTERVAL = int(config["SLEEP_INTERVAL"])
 
-while conditions[MODE]():
+        INFLUXDB_SERVER = config["INFLUXDB_SERVER"]  # IP or hostname to InfluxDB server
+        INFLUXDB_PORT = int(config["INFLUXDB_PORT"])  # Port on InfluxDB server
+        INFLUXDB_USERNAME = config["INFLUXDB_USERNAME"]
+        INFLUXDB_PASSWORD = config["INFLUXDB_PASSWORD"]
+        INFLUXDB_DATABASE = config["INFLUXDB_DATABASE"]
+        iclient = InfluxDBClient(INFLUXDB_SERVER,INFLUXDB_PORT,INFLUXDB_USERNAME,INFLUXDB_PASSWORD,INFLUXDB_DATABASE,)
+        iclient.create_database(INFLUXDB_DATABASE)
+        # conditions = {
+        # "limited": lambda: count < NUMBER_OF_ITERATIONS,
+        # "unlimited": lambda: True,
+        # }
+        count = 0
+        if config['STOP'] != "False":
+            logger.info("STOP Request Received, Exiting")
+            break
+
+    # while conditions[MODE]():
     try:
         for AURL in API_URL:
             for ENDPOINT in ENDPOINT_LIST:
-                r = (
-                    requests.get(url=AURL + ENDPOINT)
-                )
+                r = requests.get(url=AURL + ENDPOINT)
                 received_response = r.json()
                 flat_response = flattening(received_response, "", [])
                 current_time = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -80,7 +85,7 @@ while conditions[MODE]():
                 ]
                 logger.info(ENDPOINT, extra=received_response)
                 iclient.write_points(points)
-            count += 1
+        count += 1
     except Exception as e:
         # this will send an exception to the Application Insights Logs
         logging.exception("Code ran into an unforseen exception!", sys.exc_info()[0])
