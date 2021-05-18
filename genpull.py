@@ -6,18 +6,15 @@ import sys
 import os
 import urllib3
 import requests
+from requests.auth import HTTPBasicAuth
+from requests.auth import HTTPDigestAuth
 import json
 import json_log_formatter
 from influxdb import InfluxDBClient
 from datetime import datetime
 from utils.flattener import flattening
 
-# count = 0
 urllib3.disable_warnings()
-# conditions = {
-#     "limited": lambda: count < NUMBER_OF_ITERATIONS,
-#     "unlimited": lambda: True,
-# }
 
 # Sysout Logging Setup
 logger = logging.getLogger("genpull")
@@ -28,16 +25,8 @@ formatter = json_log_formatter.JSONFormatter()
 syshandler.setFormatter(formatter)
 logger.addHandler(syshandler)
 
-
-# iclient = InfluxDBClient(
-#     INFLUXDB_SERVER,
-#     INFLUXDB_PORT,
-#     INFLUXDB_USERNAME,
-#     INFLUXDB_PASSWORD,
-#     INFLUXDB_DATABASE,
-# )
-# iclient.create_database(INFLUXDB_DATABASE)
 config ={}
+sinks_dict={}
 
 while True:
     with open("config.json", "r") as f:
@@ -45,46 +34,50 @@ while True:
     
     if latest_config != config:
         config=latest_config
-        API_URL = config["API_URL"].split(",")  # Comma separated list of api urls in case of multiple apis.
-        ENDPOINT_LIST = config["ENDPOINT_LIST"].split(",")
-        # MODE = config["MODE"]  # In limited mode, only NUMBEROFITERATIONS API calls are made before exiting.
-        # NUMBER_OF_ITERATIONS = int(config["NUMBER_OF_ITERATIONS"])
-        SLEEP_INTERVAL = int(config["SLEEP_INTERVAL"])
 
-        INFLUXDB_SERVER = config["INFLUXDB_SERVER"]  # IP or hostname to InfluxDB server
-        INFLUXDB_PORT = int(config["INFLUXDB_PORT"])  # Port on InfluxDB server
-        INFLUXDB_USERNAME = config["INFLUXDB_USERNAME"]
-        INFLUXDB_PASSWORD = config["INFLUXDB_PASSWORD"]
-        INFLUXDB_DATABASE = config["INFLUXDB_DATABASE"]
-        iclient = InfluxDBClient(INFLUXDB_SERVER,INFLUXDB_PORT,INFLUXDB_USERNAME,INFLUXDB_PASSWORD,INFLUXDB_DATABASE,)
-        iclient.create_database(INFLUXDB_DATABASE)
-        # conditions = {
-        # "limited": lambda: count < NUMBER_OF_ITERATIONS,
-        # "unlimited": lambda: True,
-        # }
+        for sink in config['SINKS']:
+            #If Sink Type? and then handle sink creation accordingly
+            iclient = InfluxDBClient(sink["INFLUXDB_SERVER"],int(sink["INFLUXDB_PORT"]),sink["INFLUXDB_USERNAME"],sink["INFLUXDB_PASSWORD"],sink["INFLUXDB_DATABASE"],)
+            iclient.create_database(sink["INFLUXDB_DATABASE"])
+            sinks_dict[sink['NAME']]=iclient
+
+        SLEEP_INTERVAL = int(config["SLEEP_INTERVAL"])
         count = 0
         if config['STOP'] != "False":
             logger.info("STOP Request Received, Exiting")
             break
 
-    # while conditions[MODE]():
     try:
-        for AURL in API_URL:
-            for ENDPOINT in ENDPOINT_LIST:
-                r = requests.get(url=AURL + ENDPOINT)
-                received_response = r.json()
-                flat_response = flattening(received_response, "", [])
-                current_time = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
-                points = [
-                    {
-                        "measurement": ENDPOINT,
-                        "tags": {"APIURL": AURL},
-                        "time": current_time,
-                        "fields": flat_response,
-                    }
-                ]
-                logger.info(ENDPOINT, extra=received_response)
-                iclient.write_points(points)
+        for apiobj in config['API_LIST']:
+            if apiobj['SINK'] in sinks_dict:
+                #API Auth types checking will come here.
+                ENDPOINT_LIST=apiobj['ENDPOINT_LIST'].split(",")
+                for ENDPOINT in ENDPOINT_LIST:
+
+                    if apiobj['AUTH_TYPE']=="HTTPBasicAuth":
+                        r = requests.get(url=str(apiobj['API_URL']+ENDPOINT), auth = HTTPBasicAuth(apiobj['USERNAME'], apiobj['PASSWORD']))
+                    elif apiobj['AUTH_TYPE']=="HTTPDigestAuth":
+                        r = requests.get(url=str(apiobj['API_URL']+ENDPOINT), auth = HTTPDigestAuth(apiobj['USERNAME'], apiobj['PASSWORD']))
+                    else :
+                        r = requests.get(url=str(apiobj['API_URL']+ENDPOINT))
+
+                    received_response = r.json()
+                    flat_response = flattening(received_response, "", [])
+                    current_time = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+                    points = [
+                        {
+                            "measurement": ENDPOINT,
+                            "tags": {"APIURL": apiobj['API_URL']},
+                            "time": current_time,
+                            "fields": flat_response,
+                        }
+                    ]
+                    logger.info(apiobj['API_URL']+ENDPOINT, extra=received_response)
+                    iclient=sinks_dict[apiobj['SINK']]
+                    iclient.write_points(points)                
+            else:
+                print("Error: Please define Sink "+apiobj['SINK']+ "in the config.")
+
         count += 1
     except Exception as e:
         # this will send an exception to the Application Insights Logs
