@@ -2,8 +2,9 @@
 	"API_LIST": [
         {
 			"API_URL": "https://api.countapi.xyz/hit/",
-			"ENDPOINT_LIST": "microsoft.com,monitofi.com",
-			"SINK": "InfluxDB1",
+			"ENDPOINT_LIST": "genpull.com,monitofi.com",
+			"SINK_TYPE": "INFLUXDB",
+			"SINK_NAME": "InfluxDB1",
 			"AUTH_TYPE": "None",
 			"USERNAME": "",
 			"PASSWORD": ""
@@ -11,15 +12,26 @@
 		{
 			"API_URL": "https://api.countapi.xyz/",
 			"ENDPOINT_LIST": "hit/test1.com,hit/test2.com",
-			"SINK": "InfluxDB2",
+			"SINK_TYPE": "INFLUXDB",
+			"SINK_NAME": "InfluxDB2",
 			"AUTH_TYPE": "HTTPBasicAuth",
 			"USERNAME": "testuser",
 			"PASSWORD": "replaceme"
+		},
+		{
+			"API_URL": "https://api.countapi.xyz/",
+			"ENDPOINT_LIST": "hit/test3.com,hit/test4.com",
+			"SINK_TYPE": "TELEGRAF",
+			"SINK_NAME": "TG1",
+			"AUTH_TYPE": "",
+			"USERNAME": "",
+			"PASSWORD": ""
 		}
 	],
 
 	"SINKS": [
 	  {
+		  	"TYPE": "INFLUXDB",
 			"NAME": "InfluxDB1",
 			"INFLUXDB_SERVER": "8.8.8.80",
 			"INFLUXDB_PORT": 8086,
@@ -29,12 +41,18 @@
 
 		},
 		{
+			"TYPE": "INFLUXDB",
 			"NAME": "InfluxDB2",
 			"INFLUXDB_SERVER": "55.11.11.11",
 			"INFLUXDB_PORT": 8086,
 			"INFLUXDB_USERNAME": "root",
 			"INFLUXDB_PASSWORD": "root",
 			"INFLUXDB_DATABASE": "testdb1"
+		},
+		{
+			"TYPE": "TELEGRAF",
+			"NAME": "TG1",
+			"TELEGRAF_URL": "http://0.0.0.0:105/api/"
 		}
 	],
 

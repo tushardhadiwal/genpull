@@ -34,12 +34,14 @@ while True:
     
     if latest_config != config:
         config=latest_config
-
+        #Check if all sinks have a unique name, check if each api is mapped to valid sink?
         for sink in config['SINKS']:
-            #If Sink Type? and then handle sink creation accordingly
-            iclient = InfluxDBClient(sink["INFLUXDB_SERVER"],int(sink["INFLUXDB_PORT"]),sink["INFLUXDB_USERNAME"],sink["INFLUXDB_PASSWORD"],sink["INFLUXDB_DATABASE"],)
-            iclient.create_database(sink["INFLUXDB_DATABASE"])
-            sinks_dict[sink['NAME']]=iclient
+            if sink['TYPE']=="INFLUXDB":
+                iclient = InfluxDBClient(sink["INFLUXDB_SERVER"],int(sink["INFLUXDB_PORT"]),sink["INFLUXDB_USERNAME"],sink["INFLUXDB_PASSWORD"],sink["INFLUXDB_DATABASE"],)
+                iclient.create_database(sink["INFLUXDB_DATABASE"])
+                sinks_dict[sink['NAME']]=iclient
+            elif sink['TYPE']=="TELEGRAF":
+                sinks_dict[sink['NAME']]=sink['TELEGRAF_URL']
 
         SLEEP_INTERVAL = int(config["SLEEP_INTERVAL"])
         count = 0
@@ -49,8 +51,8 @@ while True:
 
     try:
         for apiobj in config['API_LIST']:
-            if apiobj['SINK'] in sinks_dict:
-                #API Auth types checking will come here.
+            if apiobj['SINK_TYPE'] in ["INFLUXDB","TELEGRAF"]:
+                #Means its a suuported sink
                 ENDPOINT_LIST=apiobj['ENDPOINT_LIST'].split(",")
                 for ENDPOINT in ENDPOINT_LIST:
 
@@ -62,21 +64,27 @@ while True:
                         r = requests.get(url=str(apiobj['API_URL']+ENDPOINT))
 
                     received_response = r.json()
-                    flat_response = flattening(received_response, "", [])
-                    current_time = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
-                    points = [
-                        {
-                            "measurement": ENDPOINT,
-                            "tags": {"APIURL": apiobj['API_URL']},
-                            "time": current_time,
-                            "fields": flat_response,
-                        }
-                    ]
-                    logger.info(apiobj['API_URL']+ENDPOINT, extra=received_response)
-                    iclient=sinks_dict[apiobj['SINK']]
-                    iclient.write_points(points)                
+                    if apiobj['SINK_TYPE']=="INFLUXDB":
+                        flat_response = flattening(received_response, "", [])
+                        current_time = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+                        points = [
+                            {
+                                "measurement": ENDPOINT,
+                                "tags": {"APIURL": apiobj['API_URL']},
+                                "time": current_time,
+                                "fields": flat_response,
+                            }
+                        ]
+                        logger.info(apiobj['API_URL']+ENDPOINT, extra=received_response)
+                        iclient=sinks_dict[apiobj['SINK_NAME']]
+                        iclient.write_points(points)
+
+                    elif apiobj['SINK_TYPE']=="TELEGRAF":
+                        requests.post(sinks_dict[apiobj['SINK_NAME']], json=received_response)
+                        logger.info(apiobj['API_URL']+ENDPOINT, extra=received_response)
+
             else:
-                print("Error: Please define Sink "+apiobj['SINK']+ "in the config.")
+                print("Error: Please define a Supported Sink Type instead of "+apiobj['SINK_TYPE']+ "in the config.")
 
         count += 1
     except Exception as e:
