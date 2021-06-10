@@ -3,7 +3,7 @@
 GenPull is a general purpose container, which allows us to pull JSON data from any HTTP API and store the results in InfluxDB.
 This converts a stateless HTTP Response into Stateful Data stored in an InfluxDB which can be queried using Grafana/Chronograf to get historical changes.
 
-Please create a file `config.json` and set parameters as per requirement.
+Please create a file `config.json` and set parameters as per following template.
 ```
 {
 	"API_LIST": [
